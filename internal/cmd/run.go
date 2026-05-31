@@ -12,6 +12,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/api"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/cpawebhook"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
 	log "github.com/sirupsen/logrus"
 )
@@ -28,6 +29,7 @@ func StartService(cfg *config.Config, configPath string, localPassword string) {
 	builder := cliproxy.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(configPath).
+		WithCoreAuthHook(cpawebhook.NewRequestEventHook()).
 		WithLocalManagementPassword(localPassword)
 
 	ctxSignal, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -49,6 +51,7 @@ func StartService(cfg *config.Config, configPath string, localPassword string) {
 		return
 	}
 
+	cpawebhook.StartOutboxWorker()
 	err = service.Run(runCtx)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Errorf("proxy service exited with error: %v", err)
@@ -61,6 +64,7 @@ func StartServiceBackground(cfg *config.Config, configPath string, localPassword
 	builder := cliproxy.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(configPath).
+		WithCoreAuthHook(cpawebhook.NewRequestEventHook()).
 		WithLocalManagementPassword(localPassword)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
@@ -73,6 +77,7 @@ func StartServiceBackground(cfg *config.Config, configPath string, localPassword
 		return cancelFn, doneCh
 	}
 
+	cpawebhook.StartOutboxWorker()
 	go func() {
 		defer close(doneCh)
 		if err := service.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {

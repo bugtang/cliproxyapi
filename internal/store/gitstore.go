@@ -475,6 +475,8 @@ func (s *GitTokenStore) readAuthFile(path, baseDir string) (*cliproxyauth.Auth, 
 	if provider == "" {
 		provider = "unknown"
 	}
+	proxyURL, _ := metadata["proxy_url"].(string)
+	proxyURL = strings.TrimSpace(proxyURL)
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("stat file: %w", err)
@@ -486,6 +488,7 @@ func (s *GitTokenStore) readAuthFile(path, baseDir string) (*cliproxyauth.Auth, 
 		FileName:         id,
 		Label:            s.labelFor(metadata),
 		Status:           cliproxyauth.StatusActive,
+		ProxyURL:         proxyURL,
 		Attributes:       map[string]string{"path": path},
 		Metadata:         metadata,
 		CreatedAt:        info.ModTime(),

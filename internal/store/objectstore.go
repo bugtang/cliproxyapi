@@ -577,6 +577,7 @@ func (s *ObjectTokenStore) readAuthFile(path, baseDir string) (*cliproxyauth.Aut
 	if provider == "" {
 		provider = "unknown"
 	}
+	proxyURL := strings.TrimSpace(valueAsString(metadata["proxy_url"]))
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("stat auth file: %w", err)
@@ -596,6 +597,7 @@ func (s *ObjectTokenStore) readAuthFile(path, baseDir string) (*cliproxyauth.Aut
 		FileName:         rel,
 		Label:            labelFor(metadata),
 		Status:           cliproxyauth.StatusActive,
+		ProxyURL:         proxyURL,
 		Attributes:       attr,
 		Metadata:         metadata,
 		CreatedAt:        info.ModTime(),

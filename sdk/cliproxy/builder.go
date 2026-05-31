@@ -47,6 +47,9 @@ type Builder struct {
 	// coreManager handles core authentication and execution.
 	coreManager *coreauth.Manager
 
+	// coreAuthHook observes core auth lifecycle and request results.
+	coreAuthHook coreauth.Hook
+
 	// serverOptions contains additional server configuration options.
 	serverOptions []api.ServerOption
 }
@@ -124,6 +127,12 @@ func (b *Builder) WithHooks(h Hooks) *Builder {
 // WithAuthManager overrides the authentication manager used for token lifecycle operations.
 func (b *Builder) WithAuthManager(mgr *sdkAuth.Manager) *Builder {
 	b.authManager = mgr
+	return b
+}
+
+// WithCoreAuthHook registers a hook for core auth lifecycle and request results.
+func (b *Builder) WithCoreAuthHook(hook coreauth.Hook) *Builder {
+	b.coreAuthHook = hook
 	return b
 }
 
@@ -237,7 +246,7 @@ func (b *Builder) Build() (*Service, error) {
 			})
 		}
 
-		coreManager = coreauth.NewManager(tokenStore, selector, nil)
+		coreManager = coreauth.NewManager(tokenStore, selector, b.coreAuthHook)
 	}
 	// Attach a default RoundTripper provider so providers can opt-in per-auth transports.
 	coreManager.SetRoundTripperProvider(newDefaultRoundTripperProvider())

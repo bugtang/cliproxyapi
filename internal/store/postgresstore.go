@@ -301,6 +301,7 @@ func (s *PostgresStore) List(ctx context.Context) ([]*cliproxyauth.Auth, error) 
 		if provider == "" {
 			provider = "unknown"
 		}
+		proxyURL := strings.TrimSpace(valueAsString(metadata["proxy_url"]))
 		attr := map[string]string{"path": path}
 		if email := strings.TrimSpace(valueAsString(metadata["email"])); email != "" {
 			attr["email"] = email
@@ -311,6 +312,7 @@ func (s *PostgresStore) List(ctx context.Context) ([]*cliproxyauth.Auth, error) 
 			FileName:         normalizeAuthID(id),
 			Label:            labelFor(metadata),
 			Status:           cliproxyauth.StatusActive,
+			ProxyURL:         proxyURL,
 			Attributes:       attr,
 			Metadata:         metadata,
 			CreatedAt:        createdAt,
@@ -455,11 +457,8 @@ func (s *PostgresStore) syncAuthFromDatabase(ctx context.Context) error {
 	}
 	defer rows.Close()
 
-	if err = os.RemoveAll(s.authDir); err != nil {
-		return fmt.Errorf("postgres store: reset auth directory: %w", err)
-	}
 	if err = os.MkdirAll(s.authDir, 0o700); err != nil {
-		return fmt.Errorf("postgres store: recreate auth directory: %w", err)
+		return fmt.Errorf("postgres store: create auth directory: %w", err)
 	}
 
 	for rows.Next() {

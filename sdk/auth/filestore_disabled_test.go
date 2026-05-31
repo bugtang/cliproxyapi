@@ -62,3 +62,30 @@ func TestFileTokenStore_Save_DisabledPersistsFlagForTokenStorage(t *testing.T) {
 		t.Fatalf("disabled=%v, want true (raw=%s)", meta["disabled"], string(raw))
 	}
 }
+
+func TestFileTokenStore_ListHydratesProxyURL(t *testing.T) {
+	ctx := context.Background()
+	baseDir := t.TempDir()
+	path := filepath.Join(baseDir, "codex.json")
+
+	if err := os.WriteFile(path, []byte(`{"type":"codex","proxy_url":" http://gateway.internal:18100 "}`), 0o600); err != nil {
+		t.Fatalf("seed auth file: %v", err)
+	}
+
+	store := NewFileTokenStore()
+	store.SetBaseDir(baseDir)
+
+	auths, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List() error: %v", err)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("len(auths)=%d, want 1", len(auths))
+	}
+	if got := auths[0].ProxyURL; got != "http://gateway.internal:18100" {
+		t.Fatalf("ProxyURL=%q, want %q", got, "http://gateway.internal:18100")
+	}
+	if got, _ := auths[0].Metadata["proxy_url"].(string); got == "" {
+		t.Fatalf("metadata proxy_url missing")
+	}
+}

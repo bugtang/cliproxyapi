@@ -103,6 +103,8 @@ func quotaCooldownDisabledForAuth(auth *Auth) bool {
 type Result struct {
 	// AuthID references the auth that produced this result.
 	AuthID string
+	// Auth is a snapshot of the auth after the result has been recorded.
+	Auth *Auth
 	// Provider is copied for convenience when emitting hooks.
 	Provider string
 	// Model is the upstream model identifier used for the request.
@@ -2410,6 +2412,9 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 		registry.GetGlobalRegistry().SuspendClientModel(result.AuthID, result.Model, suspendReason)
 	}
 
+	if result.Auth == nil && authSnapshot != nil {
+		result.Auth = authSnapshot
+	}
 	m.hook.OnResult(ctx, result)
 }
 

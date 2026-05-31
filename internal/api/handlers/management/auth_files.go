@@ -487,6 +487,15 @@ func (h *Handler) buildAuthFileEntry(auth *coreauth.Auth) gin.H {
 	if websockets, ok := authWebsocketsValue(auth); ok {
 		entry["websockets"] = websockets
 	}
+	if proxyURL := strings.TrimSpace(auth.ProxyURL); proxyURL != "" {
+		entry["proxy_url"] = proxyURL
+	} else if auth.Metadata != nil {
+		if rawProxyURL, ok := auth.Metadata["proxy_url"].(string); ok {
+			if trimmed := strings.TrimSpace(rawProxyURL); trimmed != "" {
+				entry["proxy_url"] = trimmed
+			}
+		}
+	}
 	return entry
 }
 
@@ -765,12 +774,14 @@ func (h *Handler) DeleteAuthFile(c *gin.Context) {
 				}
 			}
 			if err = os.Remove(full); err == nil {
+				targetAuth := h.findAuthForDelete(name)
 				if errDel := h.deleteTokenRecord(ctx, full); errDel != nil {
 					c.JSON(500, gin.H{"error": errDel.Error()})
 					return
 				}
 				deleted++
 				h.disableAuth(ctx, full)
+				h.emitCPAAuthFileEvent(ctx, "auth_file_deleted", targetAuth, name)
 			}
 		}
 		c.JSON(200, gin.H{"status": "ok", "deleted": deleted})
@@ -880,9 +891,16 @@ func (h *Handler) writeAuthFile(ctx context.Context, name string, data []byte) e
 	if errWrite := os.WriteFile(dst, data, 0o600); errWrite != nil {
 		return fmt.Errorf("failed to write file: %w", errWrite)
 	}
+	eventType := "auth_file_created"
+	if h != nil && h.authManager != nil {
+		if _, exists := h.authManager.GetByID(auth.ID); exists {
+			eventType = "auth_file_updated"
+		}
+	}
 	if err := h.upsertAuthRecord(ctx, auth); err != nil {
 		return err
 	}
+	h.emitCPAAuthFileEvent(ctx, eventType, auth, filepath.Base(name))
 	return nil
 }
 
@@ -955,7 +973,8 @@ func (h *Handler) deleteAuthFileByName(ctx context.Context, name string) (string
 
 	targetPath := filepath.Join(h.cfg.AuthDir, filepath.Base(name))
 	targetID := ""
-	if targetAuth := h.findAuthForDelete(name); targetAuth != nil {
+	targetAuth := h.findAuthForDelete(name)
+	if targetAuth != nil {
 		targetID = strings.TrimSpace(targetAuth.ID)
 		if path := strings.TrimSpace(authAttribute(targetAuth, "path")); path != "" {
 			targetPath = path
@@ -980,6 +999,7 @@ func (h *Handler) deleteAuthFileByName(ctx context.Context, name string) (string
 	} else {
 		h.disableAuth(ctx, targetPath)
 	}
+	h.emitCPAAuthFileEvent(ctx, "auth_file_deleted", targetAuth, filepath.Base(name))
 	return filepath.Base(name), http.StatusOK, nil
 }
 
@@ -1193,6 +1213,11 @@ func (h *Handler) PatchAuthFileStatus(c *gin.Context) {
 		return
 	}
 
+	eventType := "auth_file_enabled"
+	if *req.Disabled {
+		eventType = "auth_file_disabled"
+	}
+	h.emitCPAAuthFileEvent(ctx, eventType, targetAuth, name)
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "disabled": *req.Disabled})
 }
 
@@ -1293,6 +1318,7 @@ func (h *Handler) PatchAuthFileFields(c *gin.Context) {
 		return
 	}
 
+	h.emitCPAAuthFileEvent(ctx, "auth_file_updated", targetAuth, name)
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
@@ -1628,7 +1654,12 @@ func (h *Handler) saveTokenRecord(ctx context.Context, record *coreauth.Auth) (s
 			return "", fmt.Errorf("post-auth hook failed: %w", err)
 		}
 	}
-	return store.Save(ctx, record)
+	savedPath, err := store.Save(ctx, record)
+	if err != nil {
+		return "", err
+	}
+	h.emitCPAAuthFileEvent(ctx, "auth_file_created", record, filepath.Base(savedPath))
+	return savedPath, nil
 }
 
 func (h *Handler) RequestAnthropicToken(c *gin.Context) {
